@@ -1,0 +1,95 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/instrument-types}
+
+An instrument type is a classification of \emph{what an instrument is}:
+stock, bond, cryptocurrency, commodity, currency, index, fund.  This is a
+different ontology from data source kinds, which classify \emph{how we talk
+to a source}.
+
+Names are canonicalized by \texttt{canonicalize-slug}: trimmed and
+down-cased, so \texttt{"Cryptocurrency"} and \texttt{" cryptocurrency "}
+are the same type.
+
+\section{Types}
+
+\lispTypeSubsection{instrument-type}
+
+A CLOS class with slots \texttt{id}, \texttt{name}, and
+\texttt{description}.  The accessors are \lispId{instrument-type-id},
+\lispId{instrument-type-name}, and \lispId{instrument-type-description}.
+\texttt{instrument-type-p} is true of instances.
+
+\section{Functions}
+
+\lispFunctionSubsection{standard-instrument-types}
+
+The conventional \texttt{(name description)} pairs.  A fresh copy is
+returned, so callers may mutate the result freely.
+
+The seeded names are \texttt{stock}, \texttt{bond}, \texttt{commodity},
+\texttt{currency}, \texttt{cryptocurrency}, \texttt{index}, and
+\texttt{fund}.
+
+\lispFunctionSubsection{make-instrument-type}
+
+Find or create the instrument type with the given name and return it.
+\texttt{:description}, when given, fills in a missing description on an
+existing type.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-instrument-type \lispVar{name} \&key \lispVar{description})}}
+
+\lispFunctionSubsection{instrument-type-by-name}
+
+The instrument type whose canonical name is \lispVar{name}, or
+\texttt{nil}.  This does not create a row.
+
+\lispFunctionSubsection{instrument-type-id-for}
+
+The database \textsc{Uuid} of \lispVar{type}, or \texttt{nil} when
+\lispVar{type} is \texttt{nil}.  \lispVar{type} may be an
+\texttt{instrument-type} object or a name string (which is found or
+created).
+
+\lispFunctionSubsection{all-instrument-types}
+
+Every instrument type, alphabetically by name.
+
+\lispFunctionSubsection{ensure-standard-instrument-types}
+
+Insert the standard types if they are not already present, and return
+them.  Call this once after the migrations have been applied.

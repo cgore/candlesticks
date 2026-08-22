@@ -1,0 +1,166 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/config}
+
+The \texttt{candlesticks/config} package holds the connection helpers and
+the small conversions every other package needs.  A connection spec is a
+list that \texttt{postmodern:connect} can be applied to, for example
+\path{("database" "user" "password" "host" :port 5432)}.
+
+\section{Variables}
+
+\lispVariableSubsection{*default-connection-spec*}
+
+The spec \texttt{with-connection} uses when it is not given one.  Initially
+\texttt{nil}.  Set it with \texttt{set-default-connection-spec!}, or bind
+it around a call.
+
+\section{Functions}
+
+\lispFunctionSubsection{default-connection-spec}
+
+The current value of \texttt{*default-connection-spec*}.
+
+\lispFunctionSubsection{set-default-connection-spec!}
+
+Set \texttt{*default-connection-spec*} to \lispVar{spec-list} and return
+it.
+
+\lispSyntax
+
+\lispCall{\texttt{(set-default-connection-spec! \lispVar{spec-list})}}
+
+\lispFunctionSubsection{connection-spec}
+
+Return \lispVar{spec-list}, or \texttt{*default-connection-spec*} when
+\lispVar{spec-list} is \texttt{nil}.  Signals an error when neither is
+available.
+
+\lispSyntax
+
+\lispCall{\texttt{(connection-spec \&optional \lispVar{spec-list})}}
+
+\lispFunctionSubsection{current-connection}
+
+The active Postmodern connection, or \texttt{nil} when none is bound.
+This is \texttt{postmodern:*database*}.
+
+\lispFunctionSubsection{connected-p}
+
+True if \lispVar{connection} (default: the active connection) is open and
+connected.
+
+\lispSyntax
+
+\lispCall{\texttt{(connected-p \&optional \lispVar{connection})}}
+
+\lispFunctionSubsection{require-connection!}
+
+Return the active Postmodern connection, signalling a clear error if there
+is none.
+
+\lispFunctionSubsection{universal-time->timestamptz}
+
+Format a universal time as a PostgreSQL \texttt{timestamptz} literal in
+\textsc{Utc}, e.g.\ \texttt{"2026-08-18 12:00:00+00"}.  This is the form
+Postmodern and PostgreSQL accept as a parameter.  When such a value is
+read back, Postmodern hands it to us as a universal time again.
+
+\lispSyntax
+
+\lispCall{\texttt{(universal-time->timestamptz \lispVar{universal-time})}}
+
+\lispFunctionSubsection{canonicalize-slug}
+
+Trim leading and trailing whitespace from a name and down-case it, so that
+\texttt{"API"}, \texttt{" api "}, and \texttt{"Api"} are the same slug.
+Used for instrument type names and data source kind names.
+
+\lispSyntax
+
+\lispCall{\texttt{(canonicalize-slug \lispVar{name})}}
+
+\lispFunctionSubsection{to-db}
+
+Convert a Lisp \texttt{nil} into the Postmodern \textsc{Null} marker
+\texttt{:null}.  Any other value is returned unchanged.
+
+\lispFunctionSubsection{from-db}
+
+Convert a Postmodern \texttt{:null} into Lisp \texttt{nil}.  Any other
+value is returned unchanged.
+
+\lispFunctionSubsection{coerce-price}
+
+Coerce a numeric value read back from the database (Postmodern returns
+\texttt{numeric} columns as rationals) into a float.  \texttt{nil} and
+\texttt{:null} pass through as \texttt{nil}, so nullable columns such as
+volume stay \texttt{nil}.
+
+\section{Macros}
+
+\lispMacroSubsection{with-connection}
+
+Evaluate \lispVar{body} with the active database connection bound to a
+connection opened from \lispVar{spec-list}.  When \lispVar{spec-list} is
+\texttt{nil}, \lispId{*default-connection-spec*} is used instead.  The
+connection is closed when \lispVar{body} finishes.  Nesting or repeating
+the form gives you several independent connections.
+
+\lispSyntax
+
+\lispCall{\texttt{(with-connection \lispVar{spec-list} \&body \lispVar{body})}}
+
+\lispExamples
+
+\begin{lstlisting}
+(with-connection '("db" "user" "pw" "localhost" :port 5432)
+  (all-instruments))
+
+(let ((*default-connection-spec* '("db" "user" "pw" "localhost" :port 5432)))
+  (with-connection nil
+    (all-instruments)))
+\end{lstlisting}
+
+\lispMacroSubsection{first-row}
+
+Run a parameterized \textsc{Sql} statement and return the first row as a
+list of values, or \texttt{nil} when there is no row.  This is a macro so
+that its parameters are compile-time forms, which is what Postmodern's
+\texttt{query} macro requires.
+
+\lispSyntax
+
+\lispCall{\texttt{(first-row \lispVar{sql} \&rest \lispVar{params})}}

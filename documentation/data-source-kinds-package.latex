@@ -1,0 +1,92 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/data-source-kinds}
+
+A data source kind is a classification of \emph{how Candlesticks talks to
+a source}: api, website, feed, file, or manual.  A source row is ``the
+CoinGecko \textsc{Api} we call'', not a catalog of everything CoinGecko
+Inc.\ does, so one kind per source is enough.
+
+Names are canonicalized by \texttt{canonicalize-slug}.
+
+\section{Types}
+
+\lispTypeSubsection{data-source-kind}
+
+A CLOS class with slots \texttt{id}, \texttt{name}, and
+\texttt{description}.  The accessors are \lispId{data-source-kind-id},
+\lispId{data-source-kind-name}, and \lispId{data-source-kind-description}.
+\texttt{data-source-kind-p} is true of instances.
+
+\section{Functions}
+
+\lispFunctionSubsection{standard-data-source-kinds}
+
+The conventional \texttt{(name description)} pairs.  A fresh copy is
+returned, so callers may mutate the result freely.
+
+The seeded names are \texttt{api}, \texttt{website}, \texttt{feed},
+\texttt{file}, and \texttt{manual}.
+
+\lispFunctionSubsection{make-data-source-kind}
+
+Find or create the data source kind with the given name and return it.
+\texttt{:description}, when given, fills in a missing description on an
+existing kind.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-data-source-kind \lispVar{name} \&key \lispVar{description})}}
+
+\lispFunctionSubsection{data-source-kind-by-name}
+
+The data source kind whose canonical name is \lispVar{name}, or
+\texttt{nil}.  This does not create a row.
+
+\lispFunctionSubsection{data-source-kind-id-for}
+
+The database \textsc{Uuid} of \lispVar{kind}, or \texttt{nil} when
+\lispVar{kind} is \texttt{nil}.  \lispVar{kind} may be a
+\texttt{data-source-kind} object or a name string (which is found or
+created).
+
+\lispFunctionSubsection{all-data-source-kinds}
+
+Every data source kind, alphabetically by name.
+
+\lispFunctionSubsection{ensure-standard-data-source-kinds}
+
+Insert the standard kinds if they are not already present, and return
+them.  Call this once after the migrations have been applied.

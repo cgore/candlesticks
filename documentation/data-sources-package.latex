@@ -1,0 +1,82 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/data-sources}
+
+A data source is whoever actually produced the numbers: CoinGecko,
+Zapper.fi, Yahoo Finance, a CSV dump, a proprietary feed.  Retrievals
+point at a source, and candlesticks point at a retrieval, so every bar
+can be traced all the way down.
+
+\section{Types}
+
+\lispTypeSubsection{data-source}
+
+A CLOS class with slots \texttt{id}, \texttt{name},
+\lispId{data-source-kind-id}, and \lispId{data-source-kind}.  The accessors
+have the obvious names.  \lispId{data-source-kind} is the related
+\lispId{data-source-kind} object, or \texttt{nil}.
+\lispId{data-source-kind-name} on a source is the kind's canonical name,
+or \texttt{nil}.
+
+\section{Functions}
+
+\lispFunctionSubsection{make-data-source}
+
+Find or create the data source with the given name and return it.
+\texttt{:kind} is a \texttt{data-source-kind} or a name such as
+\texttt{"api"}; when given, it fills in a missing kind on an existing
+source.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-data-source \lispVar{name} \&key \lispVar{kind})}}
+
+\lispFunctionSubsection{data-source-by-name}
+
+The data source with the given name, or \texttt{nil}.  This does not
+create a row.
+
+\lispFunctionSubsection{data-source-id-for}
+
+The database \textsc{Uuid} of the data source called \lispVar{name},
+created if it does not exist yet.
+
+\lispSyntax
+
+\lispCall{\texttt{(data-source-id-for \lispVar{name} \&optional \lispVar{kind})}}
+
+\lispFunctionSubsection{all-data-sources}
+
+Every data source, alphabetically by name.

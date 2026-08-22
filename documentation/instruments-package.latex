@@ -1,0 +1,76 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/instruments}
+
+An instrument is one tradable thing: a stock, bond, cryptocurrency,
+commodity, currency, index, or anything else that exists in a fungible
+traded market.  Identity is the \textsc{Uuid}.  Short market
+abbreviations are \texttt{tickers}, because the same abbreviation can
+mean different instruments at different sources.
+
+\section{Types}
+
+\lispTypeSubsection{instrument}
+
+A CLOS class with slots \texttt{id}, \texttt{name},
+\lispId{instrument-type-id}, and \lispId{instrument-type}.  The accessors
+have the obvious names.  \texttt{instrumentp} is true of instances.
+\texttt{name} is a human label such as \texttt{"Bitcoin"} and is not
+unique.
+
+\section{Functions}
+
+\lispFunctionSubsection{make-instrument}
+
+Create a new instrument and return it.  Identity is the \textsc{Uuid};
+attach market abbreviations with \texttt{make-ticker} or
+\lispId{ensure-instrument-for-ticker}.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-instrument \&key \lispVar{name} \lispVar{instrument-type})}}
+
+\lispFunctionSubsection{fill-instrument}
+
+Fill in any missing name or type on an existing instrument, without
+overwriting values that are already set.
+
+\lispFunctionSubsection{instrument-by-id}
+
+The instrument with the given \textsc{Uuid}, or \texttt{nil}.
+
+\lispFunctionSubsection{all-instruments}
+
+Every instrument, alphabetically by name.

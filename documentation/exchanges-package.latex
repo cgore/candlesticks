@@ -1,0 +1,93 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/exchanges}
+
+An exchange is a \emph{venue}: where instruments trade.  That is not a
+data source (who told us) and not a market in the
+pair-on-a-venue sense (that is the candlestick's numerator and
+denominator plus this exchange).
+
+The same protocol on two chains is two exchanges:
+\lispId{uniswap-v3-ethereum} vs \lispId{uniswap-v3-arbitrum}.  Traditional
+venues may carry an \textsc{Iso} 10383 \textsc{Mic}: the four-character
+Market Identifier Code from the official registry (\texttt{XNAS} for
+\textsc{Nasdaq}, \texttt{XNYS} for \textsc{Nyse}).  It is optional and
+unique when present; the accessor is \texttt{exchange-mic}.  Crypto
+venues and \textsc{Dex}es usually leave it \texttt{nil} and use
+\texttt{chain} instead.
+
+\section{Types}
+
+\lispTypeSubsection{exchange}
+
+A CLOS class with slots \texttt{id}, \texttt{name}, \texttt{display-name},
+\texttt{mic}, \texttt{chain}, and \texttt{description}.  The accessors have
+the obvious names.  \texttt{mic} is an \textsc{Iso} 10383 Market
+Identifier Code, or \texttt{nil}.  \texttt{exchange-p} is true of
+instances.
+
+\section{Functions}
+
+\lispFunctionSubsection{standard-exchanges}
+
+The conventional seed list: \textsc{Nasdaq}, \textsc{Nyse}, Binance,
+Coinbase, Kraken, and a handful of \textsc{Dex}es including Uniswap V3 on
+Ethereum and Arbitrum.  Other venues are created on first use.
+
+\lispFunctionSubsection{make-exchange}
+
+Find or create the exchange with the given name (a canonical slug) and
+return it.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-exchange \lispVar{name} \&key \lispVar{display-name} \lispVar{mic} \lispVar{chain} \lispVar{description})}}
+
+\lispFunctionSubsection{exchange-by-name}
+
+The exchange whose canonical name is \lispVar{name}, or \texttt{nil}.
+
+\lispFunctionSubsection{exchange-id-for}
+
+The database \textsc{Uuid} of \lispVar{exchange}, or \texttt{nil} when
+\lispVar{exchange} is \texttt{nil}.  A name string is found or created.
+
+\lispFunctionSubsection{lookup-exchange-id}
+
+Like \texttt{exchange-id-for}, but does not create a row.
+
+\lispFunctionSubsection{ensure-standard-exchanges}
+
+Insert the standard venues if they are not already present.

@@ -1,0 +1,666 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\chapter{The Schema}
+\label{ch:schema}
+
+The database is ordinary PostgreSQL~\cite{postgresql}.  Schema changes
+live as numbered \texttt{.up.sql} / \texttt{.down.sql} pairs under
+\texttt{migrations/} and are applied with
+\texttt{cl-migratum}~\cite{cl-migratum}.  The initial (and so far only)
+migration is \texttt{20260818120000-create-schema}.  Statements in those
+files are separated by \texttt{--;;} lines, which is how cl-migratum
+splits a file into steps.
+
+This chapter is the map of that schema.  The Lisp packages in the
+chapters that follow are a veneer over these tables.
+
+\section{Conventions}
+
+\begin{itemize}
+\item Every table has a version-4 \textsc{Uuid} primary key whose default
+  is PostgreSQL's built-in \texttt{gen\_random\_uuid()}.  That function
+  lives in \texttt{pg\_catalog}, so it is available from any schema
+  without an extension (PostgreSQL~13 or later).
+\item Identity of an instrument is that \textsc{Uuid}, not a ticker
+  symbol.  Abbreviations go in \texttt{tickers}.
+\item Timestamps are \texttt{timestamp with time zone}
+  (\texttt{timestamptz} below).  The Lisp side speaks Common Lisp
+  universal times.
+\item Prices, volume, and adjusted close are \texttt{numeric}.  Postmodern
+  hands those back as rationals; the library converts them to floats on
+  the way out.
+\item A data source is who told us.  An exchange is where it traded.  A
+  market in the pair-on-a-venue sense is not a table; it is the bar's
+  numerator and denominator plus the exchange.
+\item Ticker validity windows are half-open,
+  $[\textit{valid from}, \textit{valid to})$.  A trigger forbids two
+  overlapping windows for the same source, canonical abbreviation, and
+  exchange.  The same abbreviation may be reused across non-overlapping
+  eras.
+\end{itemize}
+
+\section{How the Tables Fit Together}
+
+There are nine tables.  Four of them are catalogs you seed once:
+instrument types, data source kinds, exchanges, and candlestick
+durations.  Two of them name the things you care about: instruments
+and data sources.  Tickers attach abbreviations.  Retrievals and
+candlesticks are the growing facts: one fetch, then the bars that
+fetch produced.
+
+\begin{itemize}
+\item An instrument may have a type.  A data source may have a kind.
+\item A ticker names an instrument at one data source, optionally on one
+  exchange, during a validity window.  The same abbreviation at two
+  sources, or at two exchanges of one source, can be two instruments.
+  The same abbreviation at one source can also mean different
+  instruments in non-overlapping eras.
+\item A retrieval is one act of fetching from a source, optionally pinned
+  to an exchange.
+\item A candlestick is the as-traded \textsc{Ohlc} of a numerator
+  instrument denominated in a denominator instrument, over one duration,
+  at one time, from one retrieval.  The unique key includes the
+  retrieval, so two sources --- or two fetches of the same source --- are
+  two rows.
+\end{itemize}
+
+Figure~\ref{fig:schema-relations} is the same map drawn as foreign keys,
+with the candlesticks at the top and the catalogs they rest on cascading
+down.  A solid arrow is a required key, from the table that holds the
+column to the table it references.  A dashed arrow is nullable: a ticker
+or a retrieval may omit an exchange.  A candlestick points at two
+instruments, the numerator and the denominator of the price.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  x=3.7cm,
+  y=1.85cm,
+  font=\scriptsize\ttfamily,
+  >=Stealth,
+  tbl/.style={
+    draw=black!75,
+    rounded corners=1.5pt,
+    inner xsep=5pt,
+    inner ysep=3.5pt,
+    outer sep=1.5pt,
+    align=center,
+    minimum height=1.65em,
+  },
+  cat/.style={tbl, fill=black!3},
+  ent/.style={tbl, fill=black!8},
+  lnk/.style={tbl, fill=black!13},
+  fact/.style={tbl, fill=black!20},
+  req/.style={-{Stealth[length=1.7mm]}, thick, black!60},
+  opt/.style={req, densely dashed},
+  elab/.style={
+    font=\tiny\ttfamily,
+    inner sep=1pt,
+  },
+]
+  \node[fact, font=\small\ttfamily, inner xsep=8pt] (bars)
+    at (1,3) {candlesticks};
+
+  \node[ent] (inst) at (0,2) {instruments};
+  \node[cat] (durs) at (1,2) {candlestick\_durations};
+  \node[lnk] (retr) at (2,2) {data\_retrievals};
+
+  \node[cat] (itypes) at (0,1) {instrument\_types};
+  \node[lnk] (tick)  at (1,1) {tickers};
+  \node[ent] (srcs)  at (2,1) {data\_sources};
+
+  \node[cat] (exch)  at (1,0) {exchanges};
+  \node[cat] (skinds) at (2,0) {data\_source\_kinds};
+
+  % A bar points down at the three tables it is made of.
+  \draw[req] (bars.south west) -- (inst.north)
+    node[elab, pos=0.55, sloped, above] {numerator, denominator};
+  \draw[req] (bars) -- (durs);
+  \draw[req] (bars) -- (retr);
+
+  % Then those tables point at the catalogs and naming layer below.
+  \draw[req] (inst) -- (itypes);
+  \draw[req] (retr) -- (srcs);
+  \draw[req] (srcs) -- (skinds);
+  \draw[req] (tick) -- (inst);
+  \draw[req] (tick) -- (srcs);
+  \draw[opt] (tick) -- (exch);
+
+  % Optional exchange_id from a retrieval: around the right and under
+  % data_source_kinds, so the dashed line does not cut a box.
+  \path (exch.south) ++(0,-0.34) coordinate (belowex);
+  \draw[opt, rounded corners=3pt]
+    (retr.east) -- ++(0.3,0) coordinate (rspine)
+    -- (rspine |- belowex) -- (exch.south |- belowex) -- (exch.south);
+  \node[elab, anchor=west] at ([xshift=4pt]rspine |- srcs)
+    {optional};
+\end{tikzpicture}%
+}
+\caption{Foreign keys among the Candlesticks tables, hanging off the
+candlesticks themselves.  Solid arrows are required; dashed arrows are
+nullable.  Fill is darkest at the top and lightest on the catalogs at
+the bottom.}
+\label{fig:schema-relations}
+\end{figure}
+
+Foreign keys:
+
+\begin{itemize}
+\item \texttt{instruments.instrument\_type\_id} $\rightarrow$
+  \texttt{instrument\_types}
+\item \texttt{data\_sources.data\_source\_kind\_id} $\rightarrow$
+  \texttt{data\_source\_kinds}
+\item \texttt{tickers.instrument\_id} $\rightarrow$ \texttt{instruments}
+\item \texttt{tickers.data\_source\_id} $\rightarrow$ \texttt{data\_sources}
+\item \texttt{tickers.exchange\_id} $\rightarrow$ \texttt{exchanges}
+  (nullable)
+\item \texttt{data\_retrievals.data\_source\_id} $\rightarrow$
+  \texttt{data\_sources}
+\item \texttt{data\_retrievals.exchange\_id} $\rightarrow$ \texttt{exchanges}
+  (nullable)
+\item \texttt{candlesticks.numerator\_id} $\rightarrow$
+  \texttt{instruments}
+\item \texttt{candlesticks.denominator\_id} $\rightarrow$
+  \texttt{instruments}
+\item \texttt{candlesticks.duration\_id} $\rightarrow$
+  \texttt{candlestick\_durations}
+\item \texttt{candlesticks.data\_retrieval\_id} $\rightarrow$
+  \texttt{data\_retrievals}
+\end{itemize}
+
+\section{Overview}
+
+\begin{tabular}{@{}lp{0.55\textwidth}@{}}
+\toprule
+Table & What it holds \\
+\midrule
+\texttt{instrument\_types} &
+  What an instrument is: stock, cryptocurrency, \ldots \\
+\texttt{data\_source\_kinds} &
+  How we talk to a source: api, website, feed, \ldots \\
+\texttt{exchanges} &
+  Where it traded: NASDAQ, Binance, Uniswap V3, \ldots \\
+\texttt{instruments} &
+  One instrument; identity is the \textsc{Uuid}, not a ticker \\
+\texttt{data\_sources} &
+  Who told us: CoinGecko, Yahoo Finance, Zapper.fi, \ldots \\
+\texttt{tickers} &
+  Abbreviation a source (and optional exchange) uses, with a validity window \\
+\texttt{candlestick\_durations} &
+  Short name, long name, and a PostgreSQL interval \\
+\texttt{data\_retrievals} &
+  One fetch from a source, optionally pinned to an exchange \\
+\texttt{candlesticks} &
+  One \textsc{Ohlc} bar, linked to a pair, a duration, and a retrieval \\
+\bottomrule
+\end{tabular}
+
+The Lisp packages that talk to each table:
+
+\begin{tabular}{@{}ll@{}}
+\toprule
+Table & Package \\
+\midrule
+\texttt{instrument\_types} & \texttt{candlesticks/instrument-types} \\
+\texttt{data\_source\_kinds} & \texttt{candlesticks/data-source-kinds} \\
+\texttt{exchanges} & \texttt{candlesticks/exchanges} \\
+\texttt{instruments} & \texttt{candlesticks/instruments} \\
+\texttt{data\_sources} & \texttt{candlesticks/data-sources} \\
+\texttt{tickers} & \texttt{candlesticks/tickers} \\
+\texttt{candlestick\_durations} & \texttt{candlesticks/durations} \\
+\texttt{data\_retrievals} & \texttt{candlesticks/data-retrievals} \\
+\texttt{candlesticks} & \texttt{candlesticks/bars} \\
+\bottomrule
+\end{tabular}
+
+Migrations live in \texttt{candlesticks/migrations}.  Connections live
+in \texttt{candlesticks/config}.  The umbrella package
+\texttt{candlesticks} re-exports the rest.
+
+\section{The \texttt{instrument\_types} Table}
+
+What an instrument \emph{is}: stock, bond, cryptocurrency, and so on.
+This is a different ontology from data source kinds, which classify
+\emph{how we talk to a source}.
+
+Names are unique.  The Lisp side trims and down-cases them with
+\texttt{canonicalize-slug}, so \texttt{"Cryptocurrency"} and
+\texttt{" cryptocurrency "} are the same type.
+
+\begin{tabular}{@{}llp{0.46\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{name} & \texttt{varchar} &
+  Not null, unique \\
+\texttt{description} & \texttt{varchar} &
+  Optional \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+The conventional seed, from
+\texttt{ensure-standard-instrument-types}:
+
+\begin{tabular}{@{}lp{0.62\textwidth}@{}}
+\toprule
+Name & Description \\
+\midrule
+\texttt{stock} & Equity listed on an exchange \\
+\texttt{bond} & Debt instrument \\
+\texttt{commodity} & Fungible physical or futures-traded good \\
+\texttt{currency} & Fiat currency \\
+\texttt{cryptocurrency} & Native on-chain asset \\
+\texttt{index} & Published basket or benchmark, not itself traded \\
+\texttt{fund} & Pooled vehicle (mutual fund, ETF, \ldots) \\
+\bottomrule
+\end{tabular}
+
+\section{The \texttt{data\_source\_kinds} Table}
+
+How Candlesticks talks to a source: api, website, feed, file, or
+manual.  A source row is ``the CoinGecko \textsc{Api} we call'', not a
+catalog of everything CoinGecko Inc.\ does, so one kind per source is
+enough.
+
+Names are unique and canonicalized the same way as instrument types.
+
+\begin{tabular}{@{}llp{0.46\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{name} & \texttt{varchar} &
+  Not null, unique \\
+\texttt{description} & \texttt{varchar} &
+  Optional \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+The conventional seed, from
+\texttt{ensure-standard-data-source-kinds}:
+
+\begin{tabular}{@{}lp{0.62\textwidth}@{}}
+\toprule
+Name & Description \\
+\midrule
+\texttt{api} & Programmatic HTTP/RPC \textsc{Api} \\
+\texttt{website} & \textsc{Html} or other page we scrape or parse \\
+\texttt{feed} & Push feed (websocket, \textsc{Fix}, \ldots) \\
+\texttt{file} & File or dump (\textsc{Csv}, \textsc{Json}, \ldots) \\
+\texttt{manual} & Entered or corrected by hand \\
+\bottomrule
+\end{tabular}
+
+\section{The \texttt{exchanges} Table}
+
+Where instruments trade: a stock exchange, a \textsc{Cex}, or a
+\textsc{Dex}.  That is not a data source, and not a market in the
+pair-on-a-venue sense.
+
+The same protocol on two chains is two exchanges.  Uniswap V3 on
+Ethereum and Uniswap V3 on Arbitrum are different rows.  Traditional
+venues may carry an \textsc{Iso} 10383 \textsc{Mic}: the four-character
+Market Identifier Code from the official registry (\texttt{XNAS} for
+\textsc{Nasdaq}, \texttt{XNYS} for \textsc{Nyse}).  The column is
+optional and unique when present.  Crypto venues and \textsc{Dex}es
+usually leave it null and use \texttt{chain} instead.
+
+\begin{tabular}{@{}llp{0.42\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{name} & \texttt{varchar} &
+  Canonical slug, not null, unique \\
+\texttt{display\_name} & \texttt{varchar} &
+  Optional human label \\
+\texttt{mic} & \texttt{varchar} &
+  Optional \textsc{Iso} 10383 Market Identifier Code;
+  unique when present \\
+\texttt{chain} & \texttt{varchar} &
+  Optional; indexed \\
+\texttt{description} & \texttt{varchar} &
+  Optional \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Index: \texttt{exchanges\_chain\_index} on \texttt{chain}.
+
+The conventional seed, from \texttt{ensure-standard-exchanges}:
+
+{\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Name & Display name & Venue \\
+\midrule
+\texttt{nasdaq} & NASDAQ & \textsc{Mic} \texttt{XNAS} \\
+\texttt{nyse} & New York Stock Exchange & \textsc{Mic} \texttt{XNYS} \\
+\texttt{binance} & Binance & centralized crypto \\
+\texttt{coinbase} & Coinbase & centralized crypto \\
+\texttt{kraken} & Kraken & centralized crypto \\
+\texttt{uniswap-v3-ethereum} & Uniswap V3 (Ethereum) & chain \texttt{ethereum} \\
+\texttt{uniswap-v3-arbitrum} & Uniswap V3 (Arbitrum) & chain \texttt{arbitrum} \\
+\texttt{uniswap-v2-ethereum} & Uniswap V2 (Ethereum) & chain \texttt{ethereum} \\
+\texttt{sushiswap-ethereum} & SushiSwap (Ethereum) & chain \texttt{ethereum} \\
+\texttt{curve-ethereum} & Curve (Ethereum) & chain \texttt{ethereum} \\
+\texttt{pancakeswap-bsc} & PancakeSwap (\textsc{Bsc}) & chain \texttt{bsc} \\
+\texttt{orca-solana} & Orca (Solana) & chain \texttt{solana} \\
+\texttt{raydium-solana} & Raydium (Solana) & chain \texttt{solana} \\
+\bottomrule
+\end{tabular}
+}
+
+Other venues are created on first use.
+
+\section{The \texttt{instruments} Table}
+
+One tradable thing: a stock, a coin, a currency, whatever.  Identity is
+the \textsc{Uuid}.  \texttt{name} is a human label such as
+\texttt{"Bitcoin"} and is neither unique nor required.  Short market
+abbreviations live on \texttt{tickers}, because the same abbreviation
+can mean different instruments at different sources.
+
+\begin{tabular}{@{}llp{0.36\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{name} & \texttt{varchar} &
+  Optional display name, not unique \\
+\texttt{instrument\_type\_id} & \texttt{uuid} &
+  Optional \textsc{Fk} to \texttt{instrument\_types} \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\texttt{updated\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Index: \texttt{instruments\_type\_index} on \texttt{instrument\_type\_id}.
+
+\section{The \texttt{data\_sources} Table}
+
+Whoever actually produced the numbers: CoinGecko, Zapper.fi, Yahoo
+Finance, a \textsc{Csv} dump, a proprietary feed.  Retrievals point at a
+source, and candlesticks point at a retrieval, so every bar can be
+traced all the way down.
+
+\begin{tabular}{@{}llp{0.36\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{name} & \texttt{varchar} &
+  Not null, unique \\
+\texttt{data\_source\_kind\_id} & \texttt{uuid} &
+  Optional \textsc{Fk} to \texttt{data\_source\_kinds} \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Index: \texttt{data\_sources\_kind\_index} on
+\texttt{data\_source\_kind\_id}.
+
+There is no seeded catalog of sources.  A source row is created the
+first time you ingest from it.
+
+\section{The \texttt{tickers} Table}
+
+The abbreviation a data source uses for an instrument, optionally on a
+particular exchange.  It is \emph{not} the identity of the instrument.
+CoinGecko's aggregated \texttt{BTC} (no exchange) can be Bitcoin while
+Yahoo's \texttt{BTC} on \textsc{Nyse} is a different instrument.
+Yahoo's \texttt{AAPL} and Bloomberg's \texttt{AAPL} can both point at
+the same Apple row.
+
+The same $(\textit{data source}, \textit{canonical symbol},
+\textit{exchange})$ may appear more than once, so long as the
+validity windows do not overlap.  A missing exchange still counts:
+two aggregator tickers for the same symbol at the same source cannot
+be valid at the same moment.  The window is half-open,
+$[\textit{valid from}, \textit{valid to})$.  An unbounded start is
+stored as \texttt{-infinity}; a null \texttt{valid\_to} means the
+abbreviation is still in use.
+
+\texttt{symbol} is what the source called it.  \texttt{canonical} is
+that abbreviation trimmed and upper-cased, so \texttt{"btc"} and
+\texttt{" BTC "} match \emph{within one source}.
+
+\begin{tabular}{@{}llp{0.36\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{instrument\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{instruments} \\
+\texttt{data\_source\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{data\_sources} \\
+\texttt{exchange\_id} & \texttt{uuid} &
+  Optional \textsc{Fk} to \texttt{exchanges} \\
+\texttt{symbol} & \texttt{varchar} &
+  As the source wrote it, not null \\
+\texttt{canonical} & \texttt{varchar} &
+  Normalized form, not null \\
+\texttt{valid\_from} & \texttt{timestamptz} &
+  Not null, default \texttt{-infinity} \\
+\texttt{valid\_to} & \texttt{timestamptz} &
+  Optional; null means still valid \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Indexes:
+\begin{itemize}
+\item \texttt{tickers\_instrument\_index} on \texttt{instrument\_id}
+\item \texttt{tickers\_canonical\_index} on \texttt{canonical}
+\item \texttt{tickers\_exchange\_index} on \texttt{exchange\_id}
+\item \texttt{tickers\_lookup\_index} on source, canonical, and
+  \texttt{valid\_from}
+\end{itemize}
+
+A trigger forbids two overlapping windows for the same source,
+canonical abbreviation, and exchange.  A check constraint requires
+\texttt{valid\_to} to be after \texttt{valid\_from} when both are
+present.
+
+\section{The \texttt{candlestick\_durations} Table}
+
+One candlestick time window: a short name (such as \texttt{"w"}), a
+long name (such as \texttt{"week"}), and the PostgreSQL interval that
+corresponds to it.
+
+Short names are unique on their own, and so are long names --- there is
+only one \texttt{"d"} and only one \texttt{"week"}.  That is two unique
+constraints, not one unique pair.
+
+\begin{tabular}{@{}llp{0.46\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{short\_name} & \texttt{varchar} &
+  Not null, unique \\
+\texttt{long\_name} & \texttt{varchar} &
+  Not null, unique \\
+\texttt{duration} & \texttt{interval} &
+  Not null \\
+\bottomrule
+\end{tabular}
+
+The conventional seed, from \texttt{ensure-standard-durations}:
+
+\begin{tabular}{@{}lll@{}}
+\toprule
+Short & Long & Interval \\
+\midrule
+\texttt{s} & \texttt{second} & \texttt{1 second} \\
+\texttt{m} & \texttt{minute} & \texttt{1 minute} \\
+\texttt{h} & \texttt{hour} & \texttt{1 hour} \\
+\texttt{d} & \texttt{day} & \texttt{1 day} \\
+\texttt{w} & \texttt{week} & \texttt{1 week} \\
+\texttt{M} & \texttt{month} & \texttt{1 month} \\
+\texttt{y} & \texttt{year} & \texttt{1 year} \\
+\bottomrule
+\end{tabular}
+
+Sources that publish other windows can add their own rows.  Note that
+month is \texttt{M} (upper case) so it does not collide with minute.
+
+\section{The \texttt{data\_retrievals} Table}
+
+One act of fetching a set of data from a data source: when it happened,
+the endpoint that was queried, and any notes.  Every candlestick points
+back to the retrieval that produced it.  An optional
+\texttt{exchange\_id} pins the fetch to a venue when the source was
+asked about one.
+
+\begin{tabular}{@{}llp{0.36\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{data\_source\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{data\_sources} \\
+\texttt{exchange\_id} & \texttt{uuid} &
+  Optional \textsc{Fk} to \texttt{exchanges} \\
+\texttt{retrieved\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\texttt{endpoint} & \texttt{varchar} &
+  Optional \\
+\texttt{notes} & \texttt{text} &
+  Optional \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Indexes:
+\begin{itemize}
+\item \texttt{data\_retrievals\_source\_index} on
+  \texttt{data\_source\_id}
+\item \texttt{data\_retrievals\_exchange\_index} on
+  \texttt{exchange\_id}
+\item \texttt{data\_retrievals\_retrieved\_index} on
+  \texttt{retrieved\_at}
+\end{itemize}
+
+\section{The \texttt{candlesticks} Table}
+
+One \textsc{Ohlc} bar.  A price is always a pair of instruments:
+\texttt{BTC/USD} is Bitcoin as the numerator and the US Dollar as the
+denominator.  Open, high, low, and close are as-traded.
+\texttt{adjusted\_close} is the source's split-adjusted close when it
+reported one, and may be null.  Volume may be null.
+
+The unique key is $(\textit{numerator}$, $\textit{denominator}$,
+$\textit{duration}$, $\textit{time}$, $\textit{retrieval})$.  Inserting the
+same bar twice against one retrieval is a no-op; ingesting it again
+under a new retrieval stores a second instance.
+
+\begin{tabular}{@{}llp{0.38\textwidth}@{}}
+\toprule
+Column & Type & Notes \\
+\midrule
+\texttt{id} & \texttt{uuid} &
+  Primary key \\
+\texttt{numerator\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{instruments} \\
+\texttt{denominator\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{instruments} \\
+\texttt{duration\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{candlestick\_durations} \\
+\texttt{data\_retrieval\_id} & \texttt{uuid} &
+  Not null, \textsc{Fk} to \texttt{data\_retrievals} \\
+\texttt{time} & \texttt{timestamptz} &
+  Not null; the bar's period \\
+\texttt{open} & \texttt{numeric} &
+  Not null, as-traded \\
+\texttt{high} & \texttt{numeric} &
+  Not null, as-traded \\
+\texttt{low} & \texttt{numeric} &
+  Not null, as-traded \\
+\texttt{close} & \texttt{numeric} &
+  Not null, as-traded \\
+\texttt{volume} & \texttt{numeric} &
+  Optional \\
+\texttt{adjusted\_close} & \texttt{numeric} &
+  Optional split-adjusted close \\
+\texttt{created\_at} & \texttt{timestamptz} &
+  Not null, default \texttt{now()} \\
+\bottomrule
+\end{tabular}
+
+Check constraints:
+
+\begin{itemize}
+\item The numerator and the denominator are different instruments.
+\item \texttt{high} $\geq$ \texttt{low}.
+\item \texttt{high} is at least \texttt{open} and at least \texttt{close}.
+\item \texttt{low} is at most \texttt{open} and at most \texttt{close}.
+\item \texttt{volume} is null or $\geq 0$.
+\item \texttt{adjusted\_close} is null or $\geq 0$.
+\end{itemize}
+
+Indexes:
+\begin{itemize}
+\item \texttt{candlesticks\_query\_index} on numerator, denominator,
+  duration, and time --- the lookup \texttt{get-candlesticks} uses
+\item \texttt{candlesticks\_retrieval\_index} on
+  \texttt{data\_retrieval\_id}
+\end{itemize}
+
+\section{What Is Not a Table}
+
+A market in the pair-on-an-exchange sense is the candlestick's numerator
+and denominator plus the exchange.  That can wait; it is not a separate
+relation yet.

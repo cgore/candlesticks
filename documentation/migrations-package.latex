@@ -1,0 +1,115 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/migrations}
+
+Schema changes live as numbered \texttt{.up.sql} / \texttt{.down.sql}
+pairs under \texttt{migrations/} and are applied with
+\texttt{cl-migratum}~\cite{cl-migratum}.  The Postmodern driver takes
+ownership of Postmodern's top-level connection, so every public function
+here opens that connection, does its work, and disconnects.
+
+An optional schema name sets the connection's \texttt{search\_path} first,
+which is how the live tests keep their tables out of \texttt{public}.
+
+\section{Functions}
+
+\lispFunctionSubsection{migrations-path}
+
+The directory holding the Candlesticks migration files.
+
+\lispFunctionSubsection{connection-spec->migratum-spec}
+
+Convert a Postmodern connection spec (a list that
+\texttt{postmodern:connect} can be applied to) into the keyword spec the
+\texttt{cl-migratum} Postmodern driver expects.
+
+\lispSyntax
+
+\lispCall{\texttt{(connection-spec->migratum-spec \lispVar{spec-list})}}
+
+\lispExamples
+
+\begin{lstlisting}
+(connection-spec->migratum-spec
+ '("db" "u" "pw" "localhost" :port 5432))
+; => (:database "db" :user-name "u" :password "pw"
+;     :host "localhost" :port 5432)
+\end{lstlisting}
+
+\lispFunctionSubsection{run-migrations}
+
+Apply all pending Candlesticks migrations to the database described by
+\lispVar{spec-list}.  When \lispVar{schema} is given, it is first set as
+the connection's \texttt{search\_path}.
+
+\lispSyntax
+
+\lispCall{\texttt{(run-migrations \lispVar{spec-list} \&optional \lispVar{schema})}}
+
+\lispFunctionSubsection{revert-last-migration}
+
+Revert the most recently applied Candlesticks migration.
+
+\lispFunctionSubsection{pending-migrations}
+
+The Candlesticks migrations that have not yet been applied.
+
+\lispFunctionSubsection{applied-migrations}
+
+The Candlesticks migrations that have already been applied.
+
+\lispFunctionSubsection{latest-migration-id}
+
+The id of the most recently applied Candlesticks migration, or
+\texttt{nil}.
+
+\lispFunctionSubsection{migration-status?}
+
+True if at least one Candlesticks migration has been applied to the given
+database (in \lispVar{schema}, when given).
+
+\section{Macros}
+
+\lispMacroSubsection{with-migration-driver}
+
+Create a \texttt{cl-migratum} driver for \lispVar{spec-list}, optionally
+set the connection's \texttt{search\_path} to \lispVar{schema},
+initialize the driver, run \lispVar{body} with it bound to
+\lispVar{driver-var}, and disconnect the top-level connection when
+\lispVar{body} finishes.
+
+\lispSyntax
+
+\lispCall{\texttt{(with-migration-driver (\lispVar{driver-var} \&optional \lispVar{spec-list} \lispVar{schema}) \&body \lispVar{body})}}

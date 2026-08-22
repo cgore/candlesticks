@@ -1,0 +1,182 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/bars}
+
+This is the package that reads and writes the candlesticks themselves.
+A candlestick is the price of a numerator instrument denominated in a
+denominator instrument, over a given duration, together with the retrieval
+that produced it.  For example, a \texttt{BTC/USD} daily bar has Bitcoin
+as its numerator, the US Dollar as its denominator, and the day duration.
+
+The unique key includes the retrieval, so the same numbers from two
+sources --- or from two retrievals of the same source --- are two rows.
+
+\section{Types}
+
+\lispTypeSubsection{candlestick}
+
+A CLOS class with slots \texttt{id}, \lispId{numerator-id},
+\lispId{denominator-id}, \lispId{duration-id}, \lispId{retrieval-id},
+\texttt{time}, \texttt{open}, \texttt{high}, \texttt{low}, \texttt{close},
+\texttt{volume}, and \lispId{adjusted-close}.  The accessors have the
+obvious names.  \texttt{time} is a universal time.  \texttt{volume} and
+\texttt{adjusted-close} may be \texttt{nil}.  \texttt{open}/\texttt{high}/
+\texttt{low}/\texttt{close} are as-traded; \texttt{adjusted-close} is the
+source's split-adjusted close when it reported one.
+
+\section{Functions}
+
+\lispFunctionSubsection{instrument-id-for}
+
+Return the database \textsc{Uuid} of \lispVar{instrument}.
+\lispVar{instrument} may be an \texttt{instrument} object, or a ticker
+string resolved (and created if needed) at \texttt{:source}.
+
+\lispSyntax
+
+\lispCall{\texttt{(instrument-id-for \lispVar{instrument} \&key \lispVar{name} \lispVar{instrument-type} \lispVar{source} \lispVar{exchange} \lispVar{at})}}
+
+\lispFunctionSubsection{duration-id-for}
+
+Return the database \textsc{Uuid} of \lispVar{duration}.
+\lispVar{duration} may be a \texttt{duration} object, a short name
+(\texttt{"d"}, \texttt{"w"}, \ldots), a long name (\texttt{"day"},
+\texttt{"week"}, \ldots), or an existing duration \textsc{Uuid}.
+
+\lispFunctionSubsection{insert-candlestick}
+
+Insert a single candlestick given its already-resolved identifiers and
+return the new row.  \lispVar{time} is a universal time; the price fields
+are numbers; \lispVar{volume} may be \texttt{nil}.  A conflicting
+$(\textit{numerator}$, $\textit{denominator}$, $\textit{duration}$,
+$\textit{time}$, $\textit{retrieval})$ pair is a no-op.
+
+\lispSyntax
+
+\lispCall{\texttt{(insert-candlestick \lispVar{numerator-id} \lispVar{denominator-id} \lispVar{duration-id} \lispVar{retrieval-id} \lispVar{time} \lispVar{open} \lispVar{high} \lispVar{low} \lispVar{close} \&optional \lispVar{volume} \lispVar{adjusted-close})}}
+
+\lispFunctionSubsection{insert-candlesticks}
+
+Insert a batch of candlestick rows, each a
+\texttt{(time open high low close volume)} or
+\texttt{(time open high low close volume adjusted-close)} tuple, and return two values:
+the number of rows inserted, and the retrieval that records the batch's
+provenance (or \texttt{nil} when \texttt{:retrieval-id} was supplied).
+
+\lispVar{numerator} and \lispVar{denominator} are instrument symbols or
+\texttt{instrument} objects; \lispVar{duration} is a duration (see
+\texttt{duration-id-for}); \texttt{:source-name} names the data source.
+When \texttt{:retrieval-id} is supplied, the bars are attached to that
+existing retrieval instead of creating a new one.
+
+\lispSyntax
+
+\lispCall{\texttt{(insert-candlesticks \lispVar{rows} \&key \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{retrieval-id} \lispVar{source-name} \lispVar{source-kind} \lispVar{endpoint} \lispVar{notes} \lispVar{retrieved-at})}}
+
+\lispFunctionSubsection{ingest-candlesticks}
+
+The high-level entry point for feeding data in from a source such as
+CoinGecko or Yahoo Finance.  Store a batch of \textsc{Ohlc} candlesticks
+in a single transaction and return two values: the number of rows
+inserted, and the retrieval that records where they came from.
+
+Each call records a new retrieval, so ingesting the same numbers again
+stores a second instance of the data.  Inserting the same bars twice
+against one existing retrieval is a no-op.
+
+\lispSyntax
+
+\lispCall{\texttt{(ingest-candlesticks \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{bars} \&key \lispVar{source-name} \lispVar{source-kind} \lispVar{exchange} \lispVar{endpoint} \lispVar{notes} \lispVar{numerator-name} \lispVar{numerator-type} \lispVar{denominator-name} \lispVar{denominator-type} \lispVar{retrieved-at} \lispVar{at})}}
+
+\lispArgs
+
+\begin{description}
+\item[\lispVar{numerator}, \lispVar{denominator}] Instrument symbols or \texttt{instrument} objects.
+\item[\lispVar{duration}] A short name, long name, \texttt{duration}, or id.
+\item[\lispVar{bars}] A list of \texttt{(time open high low close volume)} or \texttt{(time open high low close volume adjusted-close)} tuples.  \lispVar{time} is a universal time; \lispVar{volume} and \lispVar{adjusted-close} may be \texttt{nil}.
+\item[\lispVar{source-name}] The name of the data source, created if needed.
+\end{description}
+
+\lispExamples
+
+\begin{lstlisting}
+(ingest-candlesticks "BTC" "USD" "d"
+  (list (list (encode-universal-time 0 0 0 18 8 2026 0)
+              25000.0 26000.0 24000.0 25500.0 100.0))
+  :source-name "CoinGecko" :source-kind "api"
+  :numerator-name "Bitcoin" :numerator-type "cryptocurrency"
+  :denominator-name "US Dollar" :denominator-type "currency")
+\end{lstlisting}
+
+\lispFunctionSubsection{get-candlesticks}
+
+Return the candlesticks for \lispVar{numerator}/\lispVar{denominator} at
+the given duration, in time-ascending order.  \texttt{:from} and
+\texttt{:to}, when given, are universal times bounding the bar time
+(inclusive).  \texttt{:source}, when given, restricts the result to bars
+retrieved from that data source.
+
+This function never inserts rows.  If the pair, duration, or source does
+not already exist, the result is the empty list.
+
+\lispSyntax
+
+\lispCall{\texttt{(get-candlesticks \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \&key \lispVar{from} \lispVar{to} \lispVar{source} \lispVar{exchange} \lispVar{at})}}
+
+\lispFunctionSubsection{count-candlesticks}
+
+The number of stored candlesticks for the pair at the given duration,
+summed over all retrievals.  Returns 0 when the pair or duration is not
+already present; this function never inserts rows.
+
+\section{Projections}
+
+These take a list of candlesticks and return a list of one field, in the
+same order.  \texttt{candlestick-close-prices} is the series most often
+handed to technical indicators.  \texttt{close-series} returns
+\texttt{(time close)} pairs, a convenient shape for feeding straight into
+a time series.
+
+\begin{itemize}
+\item \texttt{candlestick-times}
+\item \texttt{candlestick-open-prices}
+\item \texttt{candlestick-high-prices}
+\item \texttt{candlestick-low-prices}
+\item \texttt{candlestick-close-prices}
+\item \texttt{candlestick-volumes}
+\item \texttt{candlestick-adjusted-close-prices}
+\item \texttt{close-series} --- as-traded \texttt{(time close)} pairs
+\item \texttt{adjusted-close-series} --- split-adjusted \texttt{(time adjusted-close)} pairs
+\end{itemize}

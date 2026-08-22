@@ -1,0 +1,134 @@
+%%%% Copyright (C) 2026, Christopher Mark Gore,
+%%%% Soli Deo Gloria,
+%%%% All rights reserved.
+%%%%
+%%%% 22 Forest Glade Court, Saint Charles, Missouri 63304 USA.
+%%%% Web: http://cgore.com
+%%%% Email: cgore@cgore.com
+%%%%
+%%%% Redistribution and use in source and binary forms, with or without
+%%%% modification, are permitted provided that the following conditions are met:
+%%%%
+%%%%     * Redistributions of source code must retain the above copyright
+%%%%       notice, this list of conditions and the following disclaimer.
+%%%%
+%%%%     * Redistributions in binary form must reproduce the above copyright
+%%%%       notice, this list of conditions and the following disclaimer in the
+%%%%       documentation and/or other materials provided with the distribution.
+%%%%
+%%%%     * Neither the name of Christopher Mark Gore nor the names of other
+%%%%       contributors may be used to endorse or promote products derived from
+%%%%       this software without specific prior written permission.
+%%%%
+%%%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+%%%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+%%%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+%%%% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+%%%% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+%%%% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+%%%% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+%%%% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+%%%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+%%%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+%%%% POSSIBILITY OF SUCH DAMAGE.
+
+\lispPackageChapter{candlesticks/tickers}
+
+A ticker is the abbreviation a data source uses for an instrument,
+optionally on a particular exchange.  It is \emph{not} the identity of the
+instrument.  CoinGecko's aggregated \texttt{BTC} (no exchange) can be
+Bitcoin while Yahoo's \texttt{BTC} on \textsc{Nyse} is a different
+instrument.  Yahoo's \texttt{AAPL} and Bloomberg's \texttt{AAPL} can both
+point at the same Apple row.
+
+Uniqueness is $(\textit{data source}, \textit{canonical symbol},
+\textit{exchange})$ at a given time.  Validity is the half-open window
+$[\textit{valid from}, \textit{valid to})$.  \texttt{exchange} is
+\texttt{nil} when the source does not pin a venue (an aggregator).
+The same abbreviation can be reused for a different instrument after
+the previous window closes --- Yahoo's \texttt{GM} before and after
+the 2009 bankruptcy, for example.
+
+\section{Types}
+
+\lispTypeSubsection{ticker}
+
+A CLOS class with slots \texttt{id}, \texttt{instrument-id},
+\texttt{source-id}, \texttt{exchange-id}, \texttt{symbol},
+\texttt{canonical}, \texttt{valid-from}, and \texttt{valid-to}.  The
+accessors have the obvious names.  \texttt{valid-from} and
+\texttt{valid-to} are universal times, or \texttt{nil} for unbounded
+(the beginning, or still valid).  \texttt{tickerp} is true of instances.
+
+\section{Functions}
+
+\lispFunctionSubsection{canonicalize-ticker}
+
+Trim and upper-case a ticker symbol so that \texttt{"btc"} and
+\texttt{" BTC "} match \emph{within one source}.
+
+\lispExamples
+
+\begin{lstlisting}
+(canonicalize-ticker "  btc  ") ; => "BTC"
+\end{lstlisting}
+
+\lispFunctionSubsection{make-ticker}
+
+Attach \lispVar{symbol} as a ticker for \lispVar{instrument} at
+\lispVar{source}, optionally on \lispVar{exchange}, during
+$[\lispVar{valid-from}, \lispVar{valid-to})$.  If that triple is already
+valid at \lispVar{at} (default: now, or \lispVar{valid-from} when that is
+given), the existing ticker is returned and is not reassigned to a
+different instrument.  To reuse the abbreviation for a new instrument,
+\texttt{close-ticker} the old row first.
+
+\lispSyntax
+
+\lispCall{\texttt{(make-ticker \lispVar{instrument} \lispVar{symbol} \&key \lispVar{source} \lispVar{exchange} \lispVar{valid-from} \lispVar{valid-to} \lispVar{at})}}
+
+\lispFunctionSubsection{close-ticker}
+
+Set the ticker's \texttt{valid-to} to \lispVar{at} (default: now).  After
+that the abbreviation can be attached to a different instrument from
+that moment onward.
+
+\lispSyntax
+
+\lispCall{\texttt{(close-ticker \lispVar{ticker} \&optional \lispVar{at})}}
+
+\lispFunctionSubsection{ticker-by-source-and-symbol}
+
+The ticker for \lispVar{symbol} at \lispVar{source} valid at
+\lispVar{at} (default: now), or \texttt{nil}.
+Does not create a row.
+
+\lispFunctionSubsection{tickers-for-instrument}
+
+Every ticker attached to an instrument, including expired windows.
+
+\lispFunctionSubsection{tickers-for-symbol}
+
+Every ticker whose canonical abbreviation is \lispVar{symbol}, across all
+sources and validity windows.
+
+\lispFunctionSubsection{instrument-for-ticker}
+
+The instrument that \lispVar{source} calls \lispVar{symbol} at
+\lispVar{at} (default: now), or \texttt{nil}.  When \lispVar{source} is
+omitted, the instrument is returned only if every matching ticker valid
+at that time points at the same instrument; otherwise \texttt{nil}, so
+an ambiguous abbreviation is not guessed.
+Does not create a row.
+
+\lispFunctionSubsection{ensure-instrument-for-ticker}
+
+Find the instrument that \lispVar{source} calls \lispVar{symbol} at
+\lispVar{at} (default: now), or create both the instrument and the
+ticker.  This is what ingest uses.
+To alias another source onto an instrument you already have, call
+\texttt{make-ticker} with that instrument instead.
+
+\lispSyntax
+
+\lispCall{\texttt{(ensure-instrument-for-ticker \lispVar{symbol} \&key \lispVar{source} \lispVar{exchange} \lispVar{name} \lispVar{instrument-type} \lispVar{at} \lispVar{valid-from} \lispVar{valid-to})}}
