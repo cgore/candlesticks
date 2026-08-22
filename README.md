@@ -1,5 +1,7 @@
 # Candlesticks
 
+[![Albrecht Dürer, "The Vision of the Seven Candlesticks"](The_Vision_of_the_Seven_Candlesticks.jpg)](https://commons.wikimedia.org/wiki/File:Albrecht_D%C3%BCrer,_The_Vision_of_the_Seven_Candlesticks,_probably_c._1496-1498,_NGA_848.jpg)
+
 **[View PDF Documentation](documentation/candlesticks.pdf)**
 
 Candlesticks is an interface to a PostgreSQL database of historical,
