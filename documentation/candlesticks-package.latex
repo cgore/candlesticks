@@ -34,17 +34,19 @@
 
 \lispPackageChapter{candlesticks}
 
-The umbrella package.  It re-exports every public symbol from the
-sub-packages, so that \texttt{(use-package :candlesticks)} --- or simply
-\texttt{(in-package :candlesticks)} --- gives you the whole library at
-once.  It also re-exports the version helpers from
-\texttt{candlesticks/system}.
+The umbrella package, defined with \texttt{uiop:define-package} and
+\texttt{:reexport}.  Every public symbol from the sub-packages ---
+including the version helpers from \texttt{candlesticks/system} --- is
+used and re-exported, so that \texttt{(use-package :candlesticks)} ---
+or simply \texttt{(in-package :candlesticks)} --- gives you the whole
+library at once.  New exports on a sub-package show up here without
+editing this file.
 
 \section{Functions}
 
 \lispFunctionSubsection{version-string}
 
-The library version as a dotted string, currently \texttt{"0.1.0"}.
+The library version as a dotted string, currently \texttt{"0.2.0"}.
 
 \lispFunctionSubsection{version-list}
 
