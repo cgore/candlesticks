@@ -43,8 +43,8 @@
 (in-package :candlesticks/system)
 
 (defparameter version-major 0)
-(defparameter version-minor 2)
-(defparameter version-revision 1)
+(defparameter version-minor 3)
+(defparameter version-revision 0)
 
 (defun version-list ()
   (list version-major version-minor version-revision))
