@@ -55,8 +55,10 @@
            :candlestick-close
            :candlestick-volume
            :candlestick-adjusted-close
+           :candlestick-is-closed
            :instrument-id-for
            :duration-id-for
+           :sanitize-ohlc
            :insert-candlestick
            :insert-candlesticks
            :ingest-candlesticks
@@ -140,12 +142,20 @@
     :initform nil
     :documentation "The split-adjusted close as the source reported it, or
    NIL when the source did not provide one.  OPEN/HIGH/LOW/CLOSE stay
-   as-traded."))
+   as-traded.")
+   (is-closed
+    :initarg :is-closed
+    :accessor candlestick-is-closed
+    :initform t
+    :documentation "True when this print was taken after the bar's session
+   ended.  An open daily bar, such as today's crypto candle, is false.
+   The library stores the bit; the caller decides when the session ends."))
   (:documentation
    "One OHLC candlestick: the as-traded price of NUMERATOR denominated in
    DENOMINATOR over a given DURATION, together with the RETRIEVAL that
    produced it.  ADJUSTED-CLOSE is the source's split-adjusted close when
-   it has one (Yahoo does; CoinGecko typically does not)."))
+   it has one (Yahoo does; CoinGecko typically does not).  IS-CLOSED is
+   false while the session is still open."))
 
 (defmethod print-object ((candlestick candlestick) stream)
   (print-unreadable-object (candlestick stream :type t)
@@ -161,20 +171,52 @@
 (defun row->candlestick (row)
   "Build a CANDLESTICK from a row of
    (id numerator-id denominator-id duration-id retrieval-id time
-    open high low close volume adjusted-close)."
+    open high low close volume adjusted-close is-closed)."
   (make-instance 'candlestick
                  :id (elt row 0)
                  :numerator-id (elt row 1)
                  :denominator-id (elt row 2)
                  :duration-id (elt row 3)
                  :retrieval-id (elt row 4)
-                 :time (elt row 5)
+                 :time (coerce-time (elt row 5))
                  :open (coerce-price (elt row 6))
                  :high (coerce-price (elt row 7))
                  :low (coerce-price (elt row 8))
                  :close (coerce-price (elt row 9))
                  :volume (coerce-price (elt row 10))
-                 :adjusted-close (coerce-price (elt row 11))))
+                 :adjusted-close (coerce-price (elt row 11))
+                 :is-closed (coerce-closed (elt row 12))))
+
+(defun coerce-closed (value)
+  "Return T or NIL for a PostgreSQL boolean VALUE."
+  (cond ((or (eq value t)
+             (and (stringp value)
+                  (member value '("t" "true") :test #'string-equal)))
+         t)
+        ((or (null value)
+             (eq value :null)
+             (and (stringp value)
+                  (member value '("f" "false") :test #'string-equal)))
+         nil)
+        (t (and value t))))
+
+(defun bar-is-closed? (closed time)
+  "T when CLOSED marks the bar at TIME closed.
+CLOSED is T, NIL, or a function of the bar's universal time."
+  (cond ((eq closed t) t)
+        ((null closed) nil)
+        ((functionp closed) (and (funcall closed time) t))
+        (t (error "CLOSED must be T, NIL, or a function of the bar time, not ~S."
+                  closed))))
+
+(behavior 'bar-is-closed
+  (should-be-true (bar-is-closed? t 1))
+  (should-be-null (bar-is-closed? nil 1))
+  (should-be-true (bar-is-closed? (lambda (time) (> time 10)) 11))
+  (should-be-null (bar-is-closed? (lambda (time) (> time 10)) 10))
+  (should-be-true (candlestick-is-closed (make-instance 'candlestick)))
+  (should-be-null (candlestick-is-closed
+                   (make-instance 'candlestick :is-closed nil))))
 
 ;;;;
 ;;;; Resolving human input to database identifiers
@@ -224,59 +266,101 @@
 ;;;; Writing
 ;;;;
 
+(defun sanitize-ohlc (open high low close)
+  "Return OPEN HIGH LOW CLOSE with HIGH/LOW expanded to envelope OPEN and
+   CLOSE.  Yahoo (and others) occasionally emit a close outside the quoted
+   range, which violates candlesticks_check3 (low <= open and low <= close)
+   and the matching high checks."
+  (let ((o (or open 0))
+        (h (or high 0))
+        (l (or low 0))
+        (c (or close 0)))
+    (values o (max h o c) (min l o c) c)))
+
+(behavior 'sanitize-ohlc
+  (multiple-value-bind (o h l c)
+      (sanitize-ohlc 261.0 261.0 261.0 260.29998779296875)
+    (should= 261.0 o)
+    (should= 261.0 h)
+    (should= 260.29998779296875 l)
+    (should= 260.29998779296875 c))
+  (multiple-value-bind (o h l c)
+      (sanitize-ohlc 10 9 8 11)
+    (should= 10 o)
+    (should= 11 h)
+    (should= 8 l)
+    (should= 11 c))
+  (multiple-value-bind (o h l c)
+      (sanitize-ohlc 5 5 5 5)
+    (should= 5 o)
+    (should= 5 h)
+    (should= 5 l)
+    (should= 5 c)))
+
 (defun insert-candlestick (numerator-id denominator-id duration-id
                             retrieval-id time open high low close
-                            &optional volume adjusted-close)
+                            &key volume adjusted-close (closed t))
   "Insert a single CANDLESTICK given its already-resolved identifiers and
    return the new row.  TIME is a universal time; the price fields are
-   numbers; VOLUME and ADJUSTED-CLOSE may be NIL."
-  (let ((row (postmodern:query
-              "insert into candlesticks
-                   (numerator_id, denominator_id, duration_id, data_retrieval_id,
-                    time, open, high, low, close, volume, adjusted_close)
-               values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-               on conflict (numerator_id, denominator_id, duration_id, time,
-                           data_retrieval_id) do nothing
-               returning id, numerator_id, denominator_id, duration_id,
-                         data_retrieval_id, time, open, high, low, close,
-                         volume, adjusted_close"
-              numerator-id denominator-id duration-id retrieval-id
-              (universal-time->timestamptz time)
-              (or open 0) (or high 0) (or low 0) (or close 0)
-              (to-db volume) (to-db adjusted-close)
-              :row)))
-    (and row (row->candlestick row))))
+   numbers; VOLUME and ADJUSTED-CLOSE may be NIL.  CLOSED is T, NIL, or a
+   function of TIME; it sets IS-CLOSED."
+  (multiple-value-bind (open high low close)
+      (sanitize-ohlc open high low close)
+    (let ((row (postmodern:query
+                "insert into candlesticks
+                     (numerator_id, denominator_id, duration_id, data_retrieval_id,
+                      time, open, high, low, close, volume, adjusted_close,
+                      is_closed)
+                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 on conflict (numerator_id, denominator_id, duration_id, time,
+                             data_retrieval_id) do nothing
+                 returning id, numerator_id, denominator_id, duration_id,
+                           data_retrieval_id, time, open, high, low, close,
+                           volume, adjusted_close, is_closed"
+                numerator-id denominator-id duration-id retrieval-id
+                (universal-time->timestamptz time)
+                open high low close
+                (to-db volume) (to-db adjusted-close)
+                (bar-is-closed? closed time)
+                :row)))
+      (and row (row->candlestick row)))))
 
 (defun insert-candlestick-rows (rows numerator-id denominator-id duration-id
-                                retrieval-id)
+                                retrieval-id &key (closed t))
   "Insert many candlesticks, one statement per row, and return the number of
    rows inserted.  ROWS is a list of (time open high low close volume) or
-   (time open high low close volume adjusted-close) tuples.  Run this
-   inside a transaction (as INGEST-CANDLESTICKS does) so the whole batch
-   commits or rolls back together."
+   (time open high low close volume adjusted-close) tuples.  CLOSED is T,
+   NIL, or a function of each bar's time.  Run this inside a transaction
+   (as INGEST-CANDLESTICKS does) so the whole batch commits or rolls back
+   together."
   (let ((count 0))
     (dolist (row rows)
       (destructuring-bind (time open high low close volume
                            &optional adjusted-close)
           row
-        (incf count (postmodern:execute
-                     "insert into candlesticks
+        (multiple-value-bind (open high low close)
+            (sanitize-ohlc open high low close)
+          (incf count
+                (postmodern:execute
+                 "insert into candlesticks
               (numerator_id, denominator_id, duration_id, data_retrieval_id,
-               time, open, high, low, close, volume, adjusted_close)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               time, open, high, low, close, volume, adjusted_close, is_closed)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          on conflict (numerator_id, denominator_id, duration_id, time,
                      data_retrieval_id) do nothing"
-                     numerator-id denominator-id duration-id retrieval-id
-                     (universal-time->timestamptz time)
-                     (or open 0) (or high 0) (or low 0) (or close 0)
-                     (to-db volume) (to-db adjusted-close)))))
+                 numerator-id denominator-id duration-id retrieval-id
+                 (universal-time->timestamptz time)
+                 open high low close
+                 (to-db volume) (to-db adjusted-close)
+                 (bar-is-closed? closed time))))))
     count))
 
 (defun insert-candlesticks (rows &key numerator denominator duration
                             (retrieval-id nil) source-name source-kind
                             exchange
                             endpoint notes (retrieved-at (get-universal-time))
-                            (at (get-universal-time)))
+                            (at (get-universal-time))
+                            (closed t))
   "Insert a batch of candlestick ROWS, each a (time open high low close
    volume) or (time open high low close volume adjusted-close) tuple, and
    return the DATA-RETRIEVAL that records the batch's
@@ -284,9 +368,11 @@
 
    NUMERATOR and DENOMINATOR are instrument symbols or INSTRUMENT objects,
    DURATION a duration (see DURATION-ID-FOR), and SOURCE-NAME the name of the
-   data source.  AT is the universal time used to resolve ticker strings
-   (default: now).  When RETRIEVAL-ID is supplied, the bars are attached to
-   that existing retrieval instead of creating a new one."
+   data source.  CLOSED is T, NIL, or a function of each bar's universal
+   time; it sets IS-CLOSED and defaults to T.  AT is the universal time
+   used to resolve ticker strings (default: now).  When RETRIEVAL-ID is
+   supplied, the bars are attached to that existing retrieval instead of
+   creating a new one."
   (postmodern:with-transaction ()
     (let* ((num-id (instrument-id-for numerator
                                       :source source-name
@@ -305,7 +391,8 @@
                                             :exchange exchange
                                             :endpoint endpoint
                                             :notes notes)))))
-           (inserted (insert-candlestick-rows rows num-id den-id dur-id ret-id)))
+           (inserted (insert-candlestick-rows rows num-id den-id dur-id ret-id
+                                              :closed closed)))
       (if retrieval-id
         (values inserted nil)
         (values inserted (retrieval-by-id ret-id))))))
@@ -320,7 +407,8 @@
                              (numerator-name nil) (numerator-type nil)
                              (denominator-name nil) (denominator-type nil)
                              (retrieved-at (get-universal-time))
-                             (at (get-universal-time)))
+                             (at (get-universal-time))
+                             (closed t))
   "Store a batch of OHLC candlesticks in a single transaction and return the
    DATA-RETRIEVAL that records where they came from.  This is the high-level
    entry point for feeding data in from a source such as CoinGecko or Yahoo
@@ -331,7 +419,9 @@
    list of (time open high low close volume) or
    (time open high low close volume adjusted-close) tuples, where TIME is a
    universal time, the price fields are numbers, and VOLUME and
-   ADJUSTED-CLOSE may be NIL.
+   ADJUSTED-CLOSE may be NIL.  CLOSED is T, NIL, or a function of each bar's
+   universal time.  It sets IS-CLOSED and defaults to T, so a history fetch
+   is stored as finished unless the caller marks an open session.
 
    NUMERATOR-NAME / NUMERATOR-TYPE and DENOMINATOR-NAME / DENOMINATOR-TYPE
    are optional names and instrument types for the two instruments.
@@ -363,7 +453,8 @@
                                       :exchange exchange
                                       :endpoint endpoint
                                       :notes notes)))
-           (inserted (insert-candlestick-rows bars num-id den-id dur-id ret-id)))
+           (inserted (insert-candlestick-rows bars num-id den-id dur-id ret-id
+                                              :closed closed)))
       (values inserted (retrieval-by-id ret-id)))))
 
 ;;;;
@@ -446,7 +537,7 @@
                "select c.id, c.numerator_id, c.denominator_id,
                        c.duration_id, c.data_retrieval_id,
                        c.time, c.open, c.high, c.low, c.close, c.volume,
-                       c.adjusted_close
+                       c.adjusted_close, c.is_closed
                from candlesticks c
                join data_retrievals r on r.id = c.data_retrieval_id
                where c.numerator_id = $1
@@ -560,7 +651,8 @@
     (should= 95.0 (candlestick-low c))
     (should= 105.0 (candlestick-close c))
     (should= 1000.0 (candlestick-volume c))
-    (should= 52.5 (candlestick-adjusted-close c))))
+    (should= 52.5 (candlestick-adjusted-close c))
+    (should-be-true (candlestick-is-closed c))))
 
 (behavior 'projections
   (let ((first-bar (make-instance 'candlestick

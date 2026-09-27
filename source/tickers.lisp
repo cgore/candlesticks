@@ -173,7 +173,7 @@
   "A timestamptz bound as a universal time, or NIL if unbounded."
   (if (unbounded-timestamptz-p value)
       nil
-      value))
+      (coerce-time value)))
 
 (defun ticker-from->db (universal-time)
   "UNIVERSAL-TIME or NIL (unbounded start) as a timestamptz parameter."

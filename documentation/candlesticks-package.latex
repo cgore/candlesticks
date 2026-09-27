@@ -46,7 +46,7 @@ editing this file.
 
 \lispFunctionSubsection{version-string}
 
-The library version as a dotted string, currently \texttt{"0.2.0"}.
+The library version as a dotted string, currently \texttt{"0.2.1"}.
 
 \lispFunctionSubsection{version-list}
 

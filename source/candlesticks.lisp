@@ -72,8 +72,8 @@
   (eq :external (nth-value 1 (find-symbol name (find-package :candlesticks)))))
 
 (behavior 'version-string
-  (should-equal '(0 2 0) (version-list))
-  (should-string= "0.2.0" (version-string)))
+  (should-equal '(0 2 1) (version-list))
+  (should-string= "0.2.1" (version-string)))
 
 (behavior 'use-all-symbols
   (should-be-true (umbrella-exports-p "CANDLESTICK"))

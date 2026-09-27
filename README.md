@@ -70,6 +70,12 @@ time, retrieval)`.  The same bar from two sources -- or from two retrievals
 of the same source -- is two rows.  That is how we keep multiple instances
 of the same data and still know where each one came from.
 
+`is_closed` is true when the print was taken after that bar's session
+ended.  It defaults to true, so a history fetch is stored as finished.
+Pass `:closed` to `ingest-candlesticks` as `nil`, or as a function of the
+bar's universal time, to store an open session such as today's crypto
+candle.  The library does not decide when the session ends.
+
 ## A first session
 
 ```lisp

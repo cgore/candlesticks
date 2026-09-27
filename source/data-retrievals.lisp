@@ -117,7 +117,7 @@
                    :id (first row)
                    :source-id (second row)
                    :exchange-id exchange-id
-                   :retrieved-at (fourth row)
+                   :retrieved-at (coerce-time (fourth row))
                    :endpoint (from-db (fifth row))
                    :notes (from-db (sixth row))
                    :exchange (and exchange-id

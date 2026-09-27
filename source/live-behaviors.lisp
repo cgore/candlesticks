@@ -88,6 +88,16 @@
               table-name)))
     (not (null row))))
 
+(defun schema-column-p (table-name column-name)
+  "True if COLUMN-NAME exists on TABLE-NAME in the live test schema."
+  (let ((row (first-row
+              "select 1 from information_schema.columns
+               where table_schema = current_schema()
+                 and table_name = $1
+                 and column_name = $2"
+              table-name column-name)))
+    (not (null row))))
+
 (defun test-time (days)
   "2026-08-18 12:00:00 UTC plus DAYS whole days, as a universal time."
   (+ (encode-universal-time 0 0 12 18 8 2026 0)
@@ -121,10 +131,11 @@
 
 (behavior 'live-re-apply
   (with-live-schema ()
-    (should-be-false (schema-table-p "candlesticks")))
+    (should-be-true (schema-table-p "candlesticks"))
+    (should-be-false (schema-column-p "candlesticks" "is_closed")))
   (run-migrations (live-spec) *live-schema*)
   (with-live-schema ()
-    (should-be-true (schema-table-p "candlesticks"))))
+    (should-be-true (schema-column-p "candlesticks" "is_closed"))))
 
 ;;;;
 ;;;; Durations
@@ -400,6 +411,8 @@
       (should= 25500.0 (candlestick-close (first bars)))
       (should= 100.0 (candlestick-volume (first bars)))
       (should-be-null (candlestick-adjusted-close (first bars)))
+      (should-be-true (candlestick-is-closed (first bars)))
+      (should-be-true (candlestick-is-closed (second bars)))
       ;; Every bar knows its numerator, denominator, and duration.
       (should-string= (instrument-id (instrument-for-ticker "BTC"
                                                            :source "CoinGecko"))
@@ -463,6 +476,42 @@
       ;; Other pairs and durations are empty.
       (should= 0 (length (get-candlesticks "ETH" "USD" "d")))
       (should= 0 (length (get-candlesticks "BTC" "USD" "w"))))))
+
+(behavior 'live-is-closed
+  (with-live-schema ()
+    ;; Share the dollar CoinGecko already created so an unscoped USD lookup
+    ;; stays unambiguous for the later behaviors.
+    (let ((usd (instrument-for-ticker "USD" :source "CoinGecko")))
+      (make-ticker usd "USD" :source "Pulse"))
+    (let ((open-at (test-time 2)))
+      (ingest-candlesticks "ETH" "USD" "d"
+                           (list (list (test-time 0)
+                                       1.0 2.0 1.0 1.5 1.0)
+                                 (list open-at
+                                       1.5 2.0 1.4 1.8 1.0))
+                           :source-name "Pulse"
+                           :closed (lambda (time) (/= time open-at))
+                           :numerator-name "Ethereum"
+                           :numerator-type "cryptocurrency"
+                           :denominator-name "US Dollar"
+                           :denominator-type "currency")
+      (let ((bars (get-candlesticks "ETH" "USD" "d" :source "Pulse")))
+        (should= 2 (length bars))
+        (should= (test-time 0) (candlestick-time (first bars)))
+        (should-be-true (candlestick-is-closed (first bars)))
+        (should-be-null (candlestick-is-closed (second bars)))))
+    (ingest-candlesticks "SOL" "USD" "d"
+                         (list (list (test-time 0)
+                                     1.0 1.0 1.0 1.0 1.0))
+                         :source-name "Pulse"
+                         :closed nil
+                         :numerator-name "Solana"
+                         :numerator-type "cryptocurrency"
+                         :denominator-name "US Dollar"
+                         :denominator-type "currency")
+    (should-be-null
+     (candlestick-is-closed
+      (first (get-candlesticks "SOL" "USD" "d" :source "Pulse"))))))
 
 ;;;;
 ;;;; Provenance and duplicates

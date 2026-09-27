@@ -38,10 +38,11 @@
 The database is ordinary PostgreSQL~\cite{postgresql}.  Schema changes
 live as numbered \texttt{.up.sql} / \texttt{.down.sql} pairs under
 \texttt{migrations/} and are applied with
-\texttt{cl-migratum}~\cite{cl-migratum}.  The initial (and so far only)
-migration is \texttt{20260818120000-create-schema}.  Statements in those
-files are separated by \texttt{--;;} lines, which is how cl-migratum
-splits a file into steps.
+\texttt{cl-migratum}~\cite{cl-migratum}.  The initial migration is
+\texttt{20260818120000-create-schema}.
+\texttt{20260927120000-candlestick-is-closed} adds
+\texttt{is\_closed}.  Statements in those files are separated by
+\texttt{--;;} lines, which is how cl-migratum splits a file into steps.
 
 This chapter is the map of that schema.  The Lisp packages in the
 chapters that follow are a veneer over these tables.
@@ -601,6 +602,10 @@ One \textsc{Ohlc} bar.  A price is always a pair of instruments:
 denominator.  Open, high, low, and close are as-traded.
 \texttt{adjusted\_close} is the source's split-adjusted close when it
 reported one, and may be null.  Volume may be null.
+\texttt{is\_closed} is true when the print was taken after the bar's
+session ended.  It defaults to true.  The caller decides when the
+session ends; a crypto day and a stock session are not the library's
+calendar.
 
 The unique key is $(\textit{numerator}$, $\textit{denominator}$,
 $\textit{duration}$, $\textit{time}$, $\textit{retrieval})$.  Inserting the
@@ -635,6 +640,8 @@ Column & Type & Notes \\
   Optional \\
 \texttt{adjusted\_close} & \texttt{numeric} &
   Optional split-adjusted close \\
+\texttt{is\_closed} & \texttt{boolean} &
+  Not null, default true.  False while the session is still open \\
 \texttt{created\_at} & \texttt{timestamptz} &
   Not null, default \texttt{now()} \\
 \bottomrule

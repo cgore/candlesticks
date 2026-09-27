@@ -103,7 +103,7 @@ existing retrieval instead of creating a new one.
 
 \lispSyntax
 
-\lispCall{\texttt{(insert-candlesticks \lispVar{rows} \&key \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{retrieval-id} \lispVar{source-name} \lispVar{source-kind} \lispVar{endpoint} \lispVar{notes} \lispVar{retrieved-at})}}
+\lispCall{\texttt{(insert-candlesticks \lispVar{rows} \&key \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{retrieval-id} \lispVar{source-name} \lispVar{source-kind} \lispVar{endpoint} \lispVar{notes} \lispVar{retrieved-at} \lispVar{closed})}}
 
 \lispFunctionSubsection{ingest-candlesticks}
 
@@ -118,7 +118,7 @@ against one existing retrieval is a no-op.
 
 \lispSyntax
 
-\lispCall{\texttt{(ingest-candlesticks \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{bars} \&key \lispVar{source-name} \lispVar{source-kind} \lispVar{exchange} \lispVar{endpoint} \lispVar{notes} \lispVar{numerator-name} \lispVar{numerator-type} \lispVar{denominator-name} \lispVar{denominator-type} \lispVar{retrieved-at} \lispVar{at})}}
+\lispCall{\texttt{(ingest-candlesticks \lispVar{numerator} \lispVar{denominator} \lispVar{duration} \lispVar{bars} \&key \lispVar{source-name} \lispVar{source-kind} \lispVar{exchange} \lispVar{endpoint} \lispVar{notes} \lispVar{numerator-name} \lispVar{numerator-type} \lispVar{denominator-name} \lispVar{denominator-type} \lispVar{retrieved-at} \lispVar{at} \lispVar{closed})}}
 
 \lispArgs
 
@@ -127,6 +127,7 @@ against one existing retrieval is a no-op.
 \item[\lispVar{duration}] A short name, long name, \texttt{duration}, or id.
 \item[\lispVar{bars}] A list of \texttt{(time open high low close volume)} or \texttt{(time open high low close volume adjusted-close)} tuples.  \lispVar{time} is a universal time; \lispVar{volume} and \lispVar{adjusted-close} may be \texttt{nil}.
 \item[\lispVar{source-name}] The name of the data source, created if needed.
+\item[\lispVar{closed}] \texttt{t} (the default), \texttt{nil}, or a function of each bar's universal time.  Sets \texttt{is\_closed}.  \texttt{t} stores the batch as finished history.
 \end{description}
 
 \lispExamples

@@ -48,6 +48,7 @@
            :to-db
            :from-db
            :coerce-price
+           :coerce-time
            :first-row))
 (in-package :candlesticks/config)
 
@@ -184,6 +185,23 @@
     nil
     (float value)))
 
+(defun simple-date-timestamp-p (value)
+  (let* ((pkg (find-package :simple-date))
+         (class (and pkg (find-symbol "TIMESTAMP" pkg))))
+    (and class (typep value class))))
+
+(defun coerce-time (value)
+  "Coerce a timestamptz VALUE read back from the database into a universal
+   time.  Plain Postmodern returns an integer; if simple-date/postgres-glue
+   is loaded it returns a TIMESTAMP object instead."
+  (cond ((or (null value) (eq value :null)) nil)
+        ((integerp value) value)
+        ((realp value) (round value))
+        ((simple-date-timestamp-p value)
+         (funcall (find-symbol "TIMESTAMP-TO-UNIVERSAL-TIME" :simple-date)
+                  value))
+        (t (error "Cannot coerce ~S to a universal time." value))))
+
 (behavior 'to-db
   (should-eq :null (to-db nil))
   (should= 12 (to-db 12))
@@ -200,6 +218,12 @@
   (should= 9876.5 (coerce-price 19753/2))
   (should-be-null (coerce-price nil))
   (should-be-null (coerce-price :null)))
+
+(behavior 'coerce-time
+  (should= 1700000000 (coerce-time 1700000000))
+  (should= 42 (coerce-time 42.2))
+  (should-be-null (coerce-time nil))
+  (should-be-null (coerce-time :null)))
 
 (defmacro first-row (sql &rest params)
   "Run the parameterized SQL and return the first row as a list of values, or
